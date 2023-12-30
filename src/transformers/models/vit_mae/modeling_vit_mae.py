@@ -141,25 +141,27 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
 
     Args:
         embed_dim (`int`):
-            Embedding dimension.
-        grid_size (`int`):
-            The grid height and width.
+            Dimension of image embeddings.
+        grid_size (`tuple(int, int)`):
+            The patch (H, W).
         add_cls_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add a classification (CLS) token.
 
     Returns:
-        (`torch.FloatTensor` of shape (grid_size*grid_size, embed_dim) or (1+grid_size*grid_size, embed_dim): the
+        (`torch.FloatTensor` of shape (height*width, embed_dim) or (1+height*width, embed_dim): the
         position embeddings (with or without classification token)
     """
-    grid_h = np.arange(grid_size, dtype=np.float32)
-    grid_w = np.arange(grid_size, dtype=np.float32)
+    grid_h = np.arange(grid_size[0], dtype=np.float32)
+    grid_w = np.arange(grid_size[1], dtype=np.float32)
     grid = np.meshgrid(grid_w, grid_h)  # here w goes first
     grid = np.stack(grid, axis=0)
+    grid = grid.reshape([2, 1, grid_size[0], grid_size[1]])
 
-    grid = grid.reshape([2, 1, grid_size, grid_size])
     pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
+
     if add_cls_token:
         pos_embed = np.concatenate([np.zeros([1, embed_dim]), pos_embed], axis=0)
+
     return pos_embed
 
 
@@ -167,7 +169,6 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
     if embed_dim % 2 != 0:
         raise ValueError("embed_dim must be even")
 
-    # use half of dimensions to encode grid_h
     emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])  # (H*W, D/2)
     emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[1])  # (H*W, D/2)
 
@@ -176,9 +177,6 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
 
 
 def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
-    """
-    embed_dim: output dimension for each position pos: a list of positions to be encoded: size (M,) out: (M, D)
-    """
     if embed_dim % 2 != 0:
         raise ValueError("embed_dim must be even")
 
@@ -218,7 +216,8 @@ class ViTMAEEmbeddings(nn.Module):
     def initialize_weights(self):
         # initialize (and freeze) position embeddings by sin-cos embedding
         pos_embed = get_2d_sincos_pos_embed(
-            self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches**0.5), add_cls_token=True
+            self.position_embeddings.shape[-1], (int(self.patch_embeddings.image_size[0]//self.patch_embeddings.patch_size[0]), 
+                                                 int(self.patch_embeddings.image_size[1]//self.patch_embeddings.patch_size[1])), add_cls_token=True
         )
         self.position_embeddings.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
